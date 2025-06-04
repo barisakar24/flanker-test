@@ -10,24 +10,33 @@ st.set_page_config(page_title="Flanker Testi - Alpha", layout="wide")
 st.title("🧠 Flanker Testi (Alpha 10 Hz Müzik ile)")
 
 # —————————————————————————————————————————————————————————
-# 2) E-posta Ayarları (Streamlit Secrets üzerinden doldurulacak)
-#    secrets.toml dosyanız şu anahtarları içermeli:
+# 2) E-posta Ayarları (Secrets varsa, yoksa pas geçecek)
+#    Eğer Streamlit Cloud’da kaldıysanız .streamlit/secrets.toml’a şunu ekleyebilirsiniz:
 #
 #    [smtp]
 #    email         = "sizin_email@gmail.com"
-#    password      = "gmail_app_password"   # Gmail için "App Şifresi"
+#    password      = "gmail_app_password"   # Gmail App Şifresi
 #    smtp_server   = "smtp.gmail.com"
 #    smtp_port     = 587
-#    receiver      = "alici_email@domain.com"  # Sonuçları alacak araştırmacı e-posta
+#    receiver      = "alici_email@domain.com"
+#
+#    Eğer bu alanı eklemezseniz, e-posta kısmı otomatik atlanacak.
 # —————————————————————————————————————————————————————————
-smtp_email      = st.secrets["smtp"]["email"]
-smtp_password   = st.secrets["smtp"]["password"]
-smtp_server     = st.secrets["smtp"]["smtp_server"]
-smtp_port       = st.secrets["smtp"]["smtp_port"]
-receiver_email  = st.secrets["smtp"]["receiver"]
+use_smtp = False
+try:
+    smtp_email     = st.secrets["smtp"]["email"]
+    smtp_password  = st.secrets["smtp"]["password"]
+    smtp_server    = st.secrets["smtp"]["smtp_server"]
+    smtp_port      = st.secrets["smtp"]["smtp_port"]
+    receiver_email = st.secrets["smtp"]["receiver"]
+    use_smtp = True
+except:
+    # Secrets tanımlı değilse, e-posta gönderimini atla
+    st.warning("⚠️ SMTP ayarları bulunamadı. E-posta gönderimi devre dışı bırakıldı.")
+    use_smtp = False
 
 # —————————————————————————————————————————————————————————
-# 3) HTML + JavaScript (Mobil uyumlu, butonlar alt köşede, zamanlama JS ile)
+# 3) HTML + JavaScript (Mobil uyumlu, alt köşelerde buton, zamanlama JS ile)
 # —————————————————————————————————————————————————————————
 html_code = """
 <!DOCTYPE html>
@@ -110,7 +119,7 @@ html_code = """
   <div id="container">
     <!-- Başlangıç ekranı -->
     <div id="startScreen">
-      <div id="startMessage">🎧 Lütfen sesinizi açın ve “Teste Başla” tuşuna basın.</div>
+      <div id="startMessage">🎧 Lütfen sesi açın ve “Teste Başla” tuşuna basın.</div>
       <button id="startBtn">Teste Başla</button>
     </div>
 
@@ -124,19 +133,19 @@ html_code = """
     <button id="leftBtn" style="display:none;">⬅️ Sol</button>
     <button id="rightBtn" style="display:none;">➡️ Sağ</button>
 
-    <!-- Test tamamlandığında gösterilecek indirme veya gönderme linki-->
+    <!-- Test tamamlandığında gösterilecek indirme linki (gizli) -->
     <a id="downloadLink">📥 Sonuçları İndir (.csv)</a>
   </div>
 
   <script>
     // ===== Sabitler =====
     const totalTrials       = 20;
-    const fixationDuration  = 500;   // ms (fixation için)
-    const stimulusDuration  = 1500;  // ms (arrow stimulus için)
+    const fixationDuration  = 500;   // ms (fixation)
+    const stimulusDuration  = 1500;  // ms (arrow stimulus)
     const directions        = ["left","right"];
 
     let trialIndex          = 0;
-    let results             = [];    // [ [choice, correctDir, RT(ms), outcome], ... ]
+    let results             = [];    // [[choice, correctDir, RT(ms), outcome], ...]
 
     let currentDirection    = "";
     let arrowText           = "";
@@ -156,10 +165,7 @@ html_code = """
 
     // ===== “Teste Başla” butonuna tıklandığında =====
     startBtn.addEventListener("click", () => {
-      // 1) Müzik çalmayı başlat
-      bgAudio.play();
-
-      // 2) Başlangıç ekranını gizle, fixation’a geç
+      bgAudio.play();               // Müzik çalmaya başla
       startScreen.style.display = "none";
       runFixation();
     });
@@ -224,7 +230,7 @@ html_code = """
         }
       };
 
-      // 6) Zaman aşımı: 1500 ms içinde bir tıklama olmazsa “Yanıtsız”
+      // 6) Zaman aşımı: 1500 ms içinde tıklanmazsa “Yanıtsız”
       setTimeout(() => {
         if (!responded) {
           responded = true;
@@ -234,16 +240,16 @@ html_code = """
       }, stimulusDuration);
     }
 
-    // ===== Trial tamamlandığında butonları ve arrow’u gizle, bir sonraki fixation’a geç =====
+    // ===== Trial tamamlandığında butonları/arrow’u gizle, bir sonraki fixation’a geç =====
     function cleanupAndNext() {
       arrowEl.style.display  = "none";
       leftBtn.style.display  = "none";
       rightBtn.style.display = "none";
       trialIndex++;
-      setTimeout(runFixation, 100);  // Kısa bir gecikme sonrası fixation  
+      setTimeout(runFixation, 100);
     }
 
-    // ===== 20 trial bitince sonuçları hazırlayıp geri yolla =====
+    // ===== 20 trial bitince sonuçları Python’a yolla =====
     function finishTest() {
       fixationEl.style.display = "none";
       arrowEl.style.display    = "none";
@@ -256,28 +262,17 @@ html_code = """
       msg.style.marginTop = "30px";
       container.appendChild(msg);
 
-      // 1) CSV verisini oluştur
+      // 1) CSV verisini hazırla
       let csvContent = "data:text/csv;charset=utf-8,";
       csvContent += ["Basılan","DoğruYön","RT(ms)","Sonuç"].join(",") + "\\r\\n";
       results.forEach(row => {
         csvContent += row.join(",") + "\\r\\n";
       });
 
-      // 2) CSV’yi base64’e çevir
+      // 2) CSV’yi URI encode edip postMessage ile Python’a gönder
       const encodedUri = encodeURI(csvContent);
-      downloadLink.href = encodedUri;
-      downloadLink.download = "flanker_alpha_sonuclar.csv";
-      // Ama indirme linki kullanıcıya gösterilmeyecek:
-      downloadLink.style.display = "none";
-
-      // 3) Node olarak “hiddenLink” ekleyelim, sonra Streamlit’e JS → Python köprüsünden gönderelim
-      downloadLink.id = "hiddenDownload";
-      container.appendChild(downloadLink);
-
-      // 4) Sonuçları Python tarafına POST’la → “Streamlit message” olayı
-      //    (Streamlit içinde window.parent.postMessage(...) kullanılacak):
       window.parent.postMessage(
-        { type: "flanker_results", data: csvContent },
+        { type: "flanker_results", data: encodedUri },
         "*"
       );
     }
@@ -288,61 +283,57 @@ html_code = """
 """
 
 # —————————————————————————————————————————————————————————
-# 4) Streamlit içine bu HTML + JS’i embed et (yukarıdaki kodu göm)
+# 4) Bu HTML+JS’i Streamlit sayfasına göm
 # —————————————————————————————————————————————————————————
 st_html(html_code, height=800)
 
 # —————————————————————————————————————————————————————————
-# 5) Streamlit → JavaScript’tan gelen “flanker_results” postMessage’ı yakala
-#    ve e-posta ile gönder
+# 5) JavaScript → Python postMessage köprüsünü dinle
+#    Sonuç geldiğinde e-posta ile gönder, Secrets yoksa pas geç
 # —————————————————————————————————————————————————————————
-if "flanker_results_sent" not in st.session_state:
-    st.session_state["flanker_results_sent"] = False
+if "flanker_sent" not in st.session_state:
+    st.session_state["flanker_sent"] = False
 
-# Bu helper fonksiyon, JS→Python köprüsü için kullanılacak.
 def receive_results():
-    import json
-    # JS tarafı window.parent.postMessage ile “data”yı gönderdiğinde
-    # Streamlit, bu callback’i çağırır. Burada e-posta ile gönderimi yapacağız.
-    # Note: `st.experimental_get_query_params()` kullanarak posta okuyacağız.
-    # Ancak, tarayıcıda postMessage kullanan Streamlit, bu veriyi “st.experimental_get_query_params”’e
-    # “?flanker_results=...” gibi ekler. Aşağıda buna göre parse ediyoruz.
-
+    # JS tarafında window.parent.postMessage ile “flanker_results” tipi yollanmışken
+    # Streamlit, bunu URL query parametreleri (“?flanker_results=…”) içine ekler.
     params = st.experimental_get_query_params()
-    if "flanker_results" in params and not st.session_state["flanker_results_sent"]:
-        csv_data = params["flanker_results"][0]  # URI encoded CSV içeriği
-
-        # 1) URI decode edin
+    if "flanker_results" in params and not st.session_state["flanker_sent"]:
+        # 1) URI-encoded CSV içeriğini al
+        encoded_csv = params["flanker_results"][0]
         import urllib.parse
-        decoded = urllib.parse.unquote(csv_data)
+        decoded = urllib.parse.unquote(encoded_csv)
 
-        # 2) “data:text/csv;charset=utf-8,” kısmını çıkar
+        # 2) “data:text/csv;charset=utf-8,” prefix’ini çıkart
         prefix = "data:text/csv;charset=utf-8,"
         if decoded.startswith(prefix):
             decoded = decoded[len(prefix):]
 
-        # 3) decoded içinde, her satır “\r\n” ayracı ile
-        #    Örneğin şu formatta: "Basılan,DoğruYön,RT(ms),Sonuç\r\nSol,left,345,Doğru\r\n..."
-        #    E-posta gönderimi için plain text olarak kullanacağız.
+        # 3) decoded hali şu formatta: 
+        #    "Basılan,DoğruYön,RT(ms),Sonuç\r\nSol,left,345,Doğru\r\n..."
+        #    bunu e-posta içeriği olarak kullanacağız.
 
-        # 4) E-postayı hazırla ve gönder
-        try:
-            msg = EmailMessage()
-            msg["Subject"] = "Yeni Flanker Alpha Test Sonuçları"
-            msg["From"] = smtp_email
-            msg["To"] = receiver_email
-            msg.set_content(decoded)
+        # 4) Eğer SMTP ayarları aktifse, e-posta gönder:
+        if use_smtp:
+            try:
+                msg = EmailMessage()
+                msg["Subject"] = "Yeni Flanker Alpha Test Sonuçları"
+                msg["From"]    = smtp_email
+                msg["To"]      = receiver_email
+                msg.set_content(decoded)
 
-            with smtplib.SMTP(smtp_server, smtp_port) as server:
-                server.starttls()
-                server.login(smtp_email, smtp_password)
-                server.send_message(msg)
+                with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    server.starttls()
+                    server.login(smtp_email, smtp_password)
+                    server.send_message(msg)
 
-            st.success("✅ Sonuçlar başarılı bir şekilde gönderildi.")
-        except Exception as e:
-            st.error(f"❌ E-posta gönderilirken bir hata oluştu: {e}")
+                st.success("✅ Sonuçlar e-posta ile gönderildi.")
+            except Exception as e:
+                st.error(f"❌ E-posta gönderilirken hata: {e}")
+        else:
+            st.info("ℹ️ SMTP yapılandırması yapılmadığı için sonuçlar e-posta gönderilmedi.")
 
-        st.session_state["flanker_results_sent"] = True
+        st.session_state["flanker_sent"] = True
 
-# 6) “JS → Python” mesajını kontrol et
+# 6) Yukarıdaki JS mesajını kontrol et, geldiyse receive_results() çağrılır
 receive_results()
