@@ -12,7 +12,6 @@ st.title("🧠 Flanker Testi (Alpha 10 Hz Müzik ile)")
 
 # —————————————————————————————————————————————————————————
 # 2) E-posta Ayarları (Secrets varsa, yoksa pas geçecek)
-#    .streamlit/secrets.toml’da [smtp] bölümü varsa getirmeye çalışacağız.
 # —————————————————————————————————————————————————————————
 use_smtp = False
 try:
@@ -27,16 +26,16 @@ except KeyError:
     use_smtp = False
 
 # —————————————————————————————————————————————————————————
-# 3) HTML + JavaScript
-#    • 500 ms fixation (“+”)
-#    • 150 ms arrow (<<<<<, >>>>>, <<><<, >><>> rastgele)
-#    • Arrow sonrası boş ekranda butonlar beklemede
-#    • 20 trial bittiğinde sonuçlar Python’a postMessage ile gidiyor
-#    • Müzik base64 olarak embed edildi, loop şeklinde çalacak
+# 3) HTML + JavaScript (Mobil uyumlu, alt köşede butonlar, zamanlama JS ile)
+#    • Fixation: 500 ms
+#    • Arrow stimulus: 150 ms
+#    • Ardından butonlar ekranda kullanıcı tıklayana kadar bekleyecek
+#    • 4 farklı paterni (“<<<<<”, “>>>>>”, “<<><<”, “>><>>”) rastgele karıştıracak
+#    • 20 trial tamamlandığında sonuçları Python’a postMessage ile yollayacak
+#    • Müzik base64 olarak embed edildiği için kesin çalacak
 # —————————————————————————————————————————————————————————
 
-# 3A) Alpha_10Hz.wav’ı base64’e çeviriyoruz:
-#     (Kodun bu kısmını değiştirmeyeceksiniz; dosya yeri önemli değil.)
+# 3A) Alpha_10Hz.wav dosyasını base64’e çeviriyoruz
 with open("Alpha_10Hz.wav", "rb") as f:
     audio_bytes = f.read()
 audio_b64 = base64.b64encode(audio_bytes).decode()
@@ -85,7 +84,7 @@ html_code = f"""
     button:active {{
       background-color: #0056b3;
     }}
-    /* Alt köşelere yerleştirilecek butonlar */
+    /* Alt köşe butonları */
     #leftBtn {{
       position: absolute;
       bottom: 20px;
@@ -100,7 +99,7 @@ html_code = f"""
 </head>
 <body>
 
-  <!-- 1) Base64 olarak embed edilmiş Alpha_10Hz.wav (loop) -->
+  <!-- 1) Müzik (loop) – base64 olarak gömüyoruz -->
   <audio id="bgAudio" loop>
     <source src="data:audio/wav;base64,{audio_b64}" type="audio/wav" />
     Tarayıcınız ses çalmayı desteklemiyor.
@@ -113,10 +112,10 @@ html_code = f"""
       <button id="startBtn">Teste Başla</button>
     </div>
 
-    <!-- Fixation (+) -->
+    <!-- Fixation: “+” -->
     <div id="fixation" style="display:none;">+</div>
 
-    <!-- Arrow Stimulus -->
+    <!-- Arrow stimulus -->
     <div id="arrow" style="display:none;"></div>
 
     <!-- Alt köşe butonları -->
@@ -131,11 +130,11 @@ html_code = f"""
     // ===== Sabitler =====
     const totalTrials       = 20;
     const fixationDuration  = 500;   // ms
-    const stimulusDuration  = 150;   // ms (200 ms’den daha kısa)
+    const stimulusDuration  = 150;   // ms (arrow)
     const patterns          = ["<<<<<", ">>>>>", "<<><<", ">><>>"];
 
     let trialIndex          = 0;
-    let results             = [];    // [[choice, correctDir, RT, outcome], ...]
+    let results             = []; // [[choice, correctDir, RT(ms), outcome], ...]
 
     let currentPattern      = "";
     let stimulusStartTime   = 0;
@@ -153,36 +152,38 @@ html_code = f"""
     const container    = document.getElementById("container");
 
     // ===== “Teste Başla” butonuna tıklanınca =====
-    startBtn.addEventListener("click", () => {{
+    startBtn.addEventListener("click", () => {
+      // 1) Müzik çalmaya başla
       bgAudio.play();
+      // 2) Başlangıç ekranını gizle, fixation aşamasına geç
       startScreen.style.display = "none";
       runFixation();
-    }});
+    });
 
-    // ===== Fixation: 500 ms “+” =====
-    function runFixation() {{
+    // ===== Fixation (500 ms) =====
+    function runFixation() {
       fixationEl.style.display = "block";
       arrowEl.style.display    = "none";
       leftBtn.style.display    = "none";
       rightBtn.style.display   = "none";
 
-      setTimeout(() => {{
+      setTimeout(() => {
         fixationEl.style.display = "none";
         runStimulus();
-      }}, fixationDuration);
-    }}
+      }, fixationDuration);
+    }
 
-    // ===== Stimulus: 150 ms Arrow (<<<<<, >>>>>, <<><< veya >><>>) =====
-    function runStimulus() {{
-      if (trialIndex >= totalTrials) {{
+    // ===== Arrow stimulus (150 ms) =====
+    function runStimulus() {
+      if (trialIndex >= totalTrials) {
         finishTest();
         return;
-      }}
+      }
 
       // 1) Rastgele pattern seç
       currentPattern = patterns[Math.floor(Math.random() * patterns.length)];
 
-      // 2) Ekrana yaz
+      // 2) Arrow’u ekranda göster
       arrowEl.innerText = currentPattern;
       arrowEl.style.display  = "block";
       leftBtn.style.display  = "none";
@@ -192,57 +193,57 @@ html_code = f"""
       stimulusStartTime = performance.now();
       responded = false;
 
-      // 4) 150 ms sonra “arrow”u gizle, butonları göster (boş ekran)
-      setTimeout(() => {{
+      // 4) 150 ms sonra arrow’u gizle, butonları göster (boş ekran)
+      setTimeout(() => {
         arrowEl.style.display = "none";
         leftBtn.style.display  = "block";
         rightBtn.style.display = "block";
-        attachResponseHandlers();
-      }}, stimulusDuration);
-    }}
+        attachHandlers();
+      }, stimulusDuration);
+    }
 
-    // ===== Buton dinleyicilerini ekleyelim =====
-    function attachResponseHandlers() {{
-      leftBtn.onclick = () => {{
-        if (!responded) {{
+    // ===== Butonların tıklanmasını dinle =====
+    function attachHandlers() {
+      leftBtn.onclick = () => {
+        if (!responded) {
           responded = true;
           const rt = Math.round(performance.now() - stimulusStartTime);
-          // middle char: currentPattern[2]
+          // Ortadaki karakter currentPattern[2] (“<” → left doğru; “>” → right doğru)
           const correctDir = (currentPattern[2] === "<") ? "left" : "right";
           const outcome    = (correctDir === "left") ? "Doğru" : "Hatalı";
           results.push(["left", correctDir, rt, outcome]);
           cleanupAndNext();
-        }}
-      }};
+        }
+      };
 
-      rightBtn.onclick = () => {{
-        if (!responded) {{
+      rightBtn.onclick = () => {
+        if (!responded) {
           responded = true;
           const rt = Math.round(performance.now() - stimulusStartTime);
           const correctDir = (currentPattern[2] === "<") ? "left" : "right";
           const outcome    = (correctDir === "right") ? "Doğru" : "Hatalı";
           results.push(["right", correctDir, rt, outcome]);
           cleanupAndNext();
-        }}
-      }};
-    }}
+        }
+      };
+    }
 
-    // ===== Trial tamamlandığında temizleyip bir sonraki fixation =====
-    function cleanupAndNext() {{
+    // ===== Trial tamamlanınca temizle ve bir sonraki fixation =====
+    function cleanupAndNext() {
       leftBtn.style.display  = "none";
       rightBtn.style.display = "none";
       trialIndex++;
-      setTimeout(runFixation, 100);
-    }}
+      setTimeout(runFixation, 100); // 100 ms sonra yeni fixation
+    }
 
-    // ===== 20 Trial Bittiğinde Sonuçları Python’a Gönder =====
-    function finishTest() {{
+    // ===== 20 trial bittiğinde sonuçları Python’a gönder =====
+    function finishTest() {
       fixationEl.style.display = "none";
       arrowEl.style.display    = "none";
       leftBtn.style.display    = "none";
       rightBtn.style.display   = "none";
 
-      // Mesaj: “Test tamamlandı”
+      // “Test tamamlandı” mesajı
       const msg = document.createElement("div");
       msg.innerHTML = "<h2>✅ Test tamamlandı!</h2>";
       msg.style.marginTop = "30px";
@@ -251,22 +252,22 @@ html_code = f"""
       // 1) CSV verisini hazırla
       let csvContent = "data:text/csv;charset=utf-8,";
       csvContent += ["Basılan","DoğruYön","RT(ms)","Sonuç"].join(",") + "\\r\\n";
-      results.forEach(row => {{
+      results.forEach(row => {
         csvContent += row.join(",") + "\\r\\n";
-      }});
+      });
 
-      // 2) CSV’yi URI encode edip postMessage ile Python’a gönder
+      // 2) CSV’yi URI encode et ve Python’a postMessage yolla
       const encodedUri = encodeURI(csvContent);
       window.parent.postMessage(
-        {{ type: "flanker_results", data: encodedUri }},
+        { type: "flanker_results", data: encodedUri },
         "*"
       );
 
-      // 3) Gizli link’i ayarla
+      // 3) Gizli link ayarla (kullanıcı görmeyecek)
       downloadLink.href = encodedUri;
       downloadLink.download = "flanker_alpha_sonuclar.csv";
       downloadLink.style.display = "none";
-    }}
+    }
   </script>
 
 </body>
@@ -274,18 +275,18 @@ html_code = f"""
 """
 
 # —————————————————————————————————————————————————————————
-# 4) Yukarıdaki HTML+JS’i embed et (height = 800 veya ihtiyaca göre arttırın)
+# 4) Yukarıdaki HTML+JS’i Streamlit sayfasına embed et
 # —————————————————————————————————————————————————————————
 st_html(html_code, height=800)
 
 # —————————————————————————————————————————————————————————
-# 5) JS → Python postMessage köprüsü: st.query_params kullanıyoruz
+# 5) JavaScript → Python postMessage köprüsünü dinle (st.query_params kullanılıyor)
 # —————————————————————————————————————————————————————————
 if "flanker_sent" not in st.session_state:
     st.session_state["flanker_sent"] = False
 
 def receive_results():
-    params = st.query_params  # st.experimental_get_query_params yerine st.query_params
+    params = st.query_params
     if "flanker_results" in params and not st.session_state["flanker_sent"]:
         encoded_csv = params["flanker_results"][0]
         import urllib.parse
@@ -296,7 +297,7 @@ def receive_results():
         if decoded.startswith(prefix):
             decoded = decoded[len(prefix):]
 
-        # E-posta gönderimi (Secrets tanımlıysa)
+        # E-posta gönderimi (Secrets varsa)
         if use_smtp:
             try:
                 msg = EmailMessage()
