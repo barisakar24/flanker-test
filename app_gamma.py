@@ -4,9 +4,26 @@ import smtplib
 from email.message import EmailMessage
 import urllib.parse
 
+# Sayfa ayarları
 st.set_page_config(page_title="Flanker Testi - Gamma", layout="wide")
 st.title("🧠 Flanker Testi (Gamma 40 Hz Müzik ile)")
 
+# 📌 Yönerge
+with st.expander("📢 Yönerge (Tıklayarak Göster/Gizle)"):
+    st.markdown("""
+    🎯 **TEST YÖNERGESİ**
+
+    Bu testte ekranda önce `+` işareti, ardından örnek olarak `<<<<<`, `>>>>>`, `<<><<`, `>><>>` gibi semboller göreceksiniz.  
+    **Dikkat etmeniz gereken tam ortadaki ok yönüdür.**
+
+    - Eğer ortadaki ok **sağa bakıyorsa**, sağ alttaki butona basınız.  
+    - Eğer ortadaki ok **sola bakıyorsa**, sol alttaki butona basınız.
+
+    ⏱️ Lütfen **olabildiğince hızlı ve doğru cevap vermeye** çalışınız.  
+    🔇 Müzik çalıyorsa cihazınızın sesi açıktır; arka planda 40Hz Gamma müziği oynatılacaktır.
+    """)
+
+# SMTP ayarları kontrolü
 smtp_ready = False
 try:
     smtp_email = st.secrets["smtp"]["email"]
@@ -16,118 +33,131 @@ try:
     receiver_email = st.secrets["smtp"]["receiver"]
     smtp_ready = True
 except:
-    st.warning("⚠️ SMTP ayarları eksik!")
+    st.warning("⚠️ SMTP ayarları bulunamadı. E-posta gönderimi devre dışı bırakıldı.")
 
+# HTML ve JavaScript kodu
 html_code = """
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset='UTF-8'>
-<title>Flanker Gamma</title>
-<style>
-  html, body { margin: 0; padding: 0; height: 100vh;
-    font-family: Arial; display: flex;
-    flex-direction: column; justify-content: center; align-items: center; background: white; }
-  #arrow, #fixation { font-size: 72px; margin: 20px; }
-  #startMessage { font-size: 18px; text-align: center; margin-bottom: 20px; }
-  button {
-    padding: 12px 24px; font-size: 20px; border: none;
-    border-radius: 8px; margin: 10px; background-color: #007bff; color: white;
-  }
-  #leftBtn, #rightBtn {
-    position: fixed; bottom: 10px; width: 40%;
-  }
-  #leftBtn { left: 10px; }
-  #rightBtn { right: 10px; }
-</style>
+  <meta charset="UTF-8">
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      background-color: white;
+      font-family: sans-serif;
+      height: 100vh; overflow: hidden;
+    }
+    #container {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      height: 100vh; text-align: center;
+    }
+    #arrow, #fixation { font-size: 60px; display: none; }
+    button {
+      font-size: 24px;
+      padding: 10px 20px;
+      margin: 10px;
+      border: none;
+      border-radius: 8px;
+      background-color: #007BFF;
+      color: white;
+    }
+    #leftBtn { position: absolute; bottom: 20px; left: 20px; display: none; }
+    #rightBtn { position: absolute; bottom: 20px; right: 20px; display: none; }
+  </style>
 </head>
 <body>
-<audio id='bgAudio' loop>
-  <source src='https://barisakar24.github.io/flanker-test/Gamma_40Hz.wav' type='audio/wav'>
-</audio>
-
-<div id='startScreen'>
-  <div id='startMessage'>
-    🎧 40 Hz Gamma müziğiyle dikkat testi.<br><br>
-    Ortadaki oka göre: Sağa → Sağ, Sola → Sol buton.<br>
-    Hızlı ve doğru basmaya çalışın.
+  <audio id="bgAudio" autoplay loop>
+    <source src="https://barisakar24.github.io/flanker-test/Gamma_40Hz.wav" type="audio/wav">
+  </audio>
+  <div id="container">
+    <div id="startScreen">
+      <h2>🎧 Lütfen sesinizi açın</h2>
+      <button id="startBtn">Teste Başla</button>
+    </div>
+    <div id="fixation">+</div>
+    <div id="arrow"></div>
+    <button id="leftBtn">⬅️ Sol</button>
+    <button id="rightBtn">➡️ Sağ</button>
   </div>
-  <button onclick='startTest()'>Teste Başla</button>
-</div>
+  <script>
+    const trials = 20;
+    const patterns = ["<<<<<", ">>>>>", "<<><<", ">><>>"];
+    const fixationTime = 300;
+    const stimulusTime = 200;
+    let results = [];
+    let current = 0;
+    let correctDir = "";
+    let startTime = 0;
+    let responded = false;
+    const fixation = document.getElementById("fixation");
+    const arrow = document.getElementById("arrow");
+    const leftBtn = document.getElementById("leftBtn");
+    const rightBtn = document.getElementById("rightBtn");
+    document.getElementById("startBtn").onclick = () => {
+      document.getElementById("startScreen").style.display = "none";
+      nextTrial();
+    };
 
-<div id='fixation' style='display:none;'>+</div>
-<div id='arrow' style='display:none;'></div>
-<button id='leftBtn' style='display:none;' onclick='handleResponse("left")'>⬅️ Sol</button>
-<button id='rightBtn' style='display:none;' onclick='handleResponse("right")'>➡️ Sağ</button>
+    function nextTrial() {
+      if (current >= trials) return finishTest();
+      fixation.style.display = "block";
+      arrow.style.display = "none";
+      leftBtn.style.display = "none";
+      rightBtn.style.display = "none";
+      setTimeout(() => {
+        fixation.style.display = "none";
+        showStimulus();
+      }, fixationTime);
+    }
 
-<script>
-const patterns = ['<<<<<', '>>>>>', '<<><<', '>><>>'];
-const trials = 20;
-let current = 0;
-let results = [];
-let direction = '';
-let startTime = 0;
-let responded = false;
+    function showStimulus() {
+      let pat = patterns[Math.floor(Math.random() * patterns.length)];
+      arrow.textContent = pat;
+      arrow.style.display = "block";
+      correctDir = pat[2] === ">" ? "right" : "left";
+      responded = false;
+      startTime = performance.now();
+      setTimeout(() => {
+        arrow.style.display = "none";
+        leftBtn.style.display = "block";
+        rightBtn.style.display = "block";
+      }, stimulusTime);
+    }
 
-function startTest() {
-  document.getElementById('startScreen').style.display = 'none';
-  document.getElementById('bgAudio').play();
-  nextFixation();
-}
+    function handleResponse(choice) {
+      if (responded) return;
+      responded = true;
+      let rt = Math.round(performance.now() - startTime);
+      let isCorrect = choice === correctDir ? "Doğru" : "Hatalı";
+      results.push([choice, correctDir, rt, isCorrect]);
+      current++;
+      setTimeout(nextTrial, 200);
+    }
 
-function nextFixation() {
-  if (current >= trials) return finish();
-  document.getElementById('fixation').style.display = 'block';
-  document.getElementById('arrow').style.display = 'none';
-  document.getElementById('leftBtn').style.display = 'none';
-  document.getElementById('rightBtn').style.display = 'none';
-  setTimeout(() => {
-    document.getElementById('fixation').style.display = 'none';
-    showStimulus();
-  }, 300);
-}
+    leftBtn.onclick = () => handleResponse("left");
+    rightBtn.onclick = () => handleResponse("right");
 
-function showStimulus() {
-  const pat = patterns[Math.floor(Math.random() * patterns.length)];
-  document.getElementById('arrow').innerText = pat;
-  document.getElementById('arrow').style.display = 'block';
-  direction = pat.charAt(2) === '>' ? 'right' : 'left';
-  startTime = performance.now();
-  responded = false;
-  setTimeout(() => {
-    document.getElementById('arrow').style.display = 'none';
-    document.getElementById('leftBtn').style.display = 'block';
-    document.getElementById('rightBtn').style.display = 'block';
-  }, 200);
-}
-
-function handleResponse(choice) {
-  if (responded) return;
-  responded = true;
-  const rt = Math.round(performance.now() - startTime);
-  const correct = (choice === direction) ? 'Doğru' : 'Hatalı';
-  results.push([choice, direction, rt, correct]);
-  current++;
-  setTimeout(nextFixation, 300);
-}
-
-function finish() {
-  document.body.innerHTML = '<h2>✅ Test bitti, sonuçlar gönderiliyor...</h2>';
-  let csv = 'Basılan,DoğruYön,RT(ms),Sonuç\n';
-  results.forEach(r => { csv += r.join(',') + '\n'; });
-  const encoded = encodeURIComponent(csv);
-  const iframe = document.createElement('iframe');
-  iframe.style.display = 'none';
-  iframe.src = '?flanker_results=' + encoded;
-  document.body.appendChild(iframe);
-}
-</script>
+    function finishTest() {
+      document.body.innerHTML = "<h2>✅ Test tamamlandı. Sonuçlar gönderiliyor...</h2>";
+      let csv = "Cevaplanan,DoğruYön,RT,Sonuç\\n";
+      results.forEach(r => { csv += r.join(",") + "\\n"; });
+      const encoded = encodeURIComponent(csv);
+      const iframe = document.createElement("iframe");
+      iframe.style.display = "none";
+      iframe.src = "?flanker_results=" + encoded;
+      document.body.appendChild(iframe);
+    }
+  </script>
 </body>
 </html>
 """
 
-st_html(html_code, height=700)
+# HTML gömme
+st_html(html_code, height=750)
 
+# JS → Python veri çekme ve e-posta gönderme
 if smtp_ready and "flanker_results_sent" not in st.session_state:
     st.session_state["flanker_results_sent"] = False
 
@@ -135,12 +165,15 @@ if smtp_ready and not st.session_state["flanker_results_sent"]:
     params = st.query_params
     if "flanker_results" in params:
         csv_data = urllib.parse.unquote(params["flanker_results"])
+        if csv_data.startswith("data:text/csv;charset=utf-8,"):
+            csv_data = csv_data[len("data:text/csv;charset=utf-8,"):]
         try:
             msg = EmailMessage()
-            msg["Subject"] = "Yeni Flanker Test (Gamma) Sonuçları"
+            msg["Subject"] = "Yeni Flanker Test Sonuçları (Gamma)"
             msg["From"] = smtp_email
             msg["To"] = receiver_email
-            msg.set_content(csv_data)
+            msg.set_content("Sonuçlar ektedir.")
+            msg.add_attachment(csv_data.encode("utf-8"), maintype="text", subtype="csv", filename="flanker_gamma.csv")
             with smtplib.SMTP(smtp_server, smtp_port) as server:
                 server.starttls()
                 server.login(smtp_email, smtp_password)
