@@ -204,3 +204,4 @@ if smtp_ready and not st.session_state["flanker_results_sent"]:
             st.session_state["flanker_results_sent"] = True
         except Exception as e:
             st.error(f"❌ E-posta gönderilemedi: {e}")
+            
