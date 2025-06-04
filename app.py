@@ -5,11 +5,9 @@ import csv
 from io import StringIO
 import base64
 
-# Sayfa başlığı
 st.set_page_config(page_title="Flanker Testi - Alpha", layout="centered")
 st.title("🧠 Flanker Testi (Alpha 10Hz Müzik ile)")
 
-# Ses oynatıcı
 def get_audio_player(file_path):
     with open(file_path, "rb") as f:
         data = f.read()
@@ -22,7 +20,7 @@ def get_audio_player(file_path):
         """
 st.markdown(get_audio_player("Alpha_10Hz.wav"), unsafe_allow_html=True)
 
-# Oturum değişkenleri
+# State vars
 if "step" not in st.session_state:
     st.session_state.step = "start"
     st.session_state.trial_index = 0
@@ -31,21 +29,23 @@ if "step" not in st.session_state:
     st.session_state.arrow = ""
     st.session_state.dir = ""
     st.session_state.waiting = False
+    st.session_state.last_run = 0
 
-# Başlat
 if st.session_state.step == "start":
     if st.button("🎧 Başlamak için tıkla"):
         st.session_state.step = "fixation"
+        st.session_state.last_run = time.time()
+        st.experimental_rerun()
 
-# Fixation süresi: 500ms
-if st.session_state.step == "fixation":
+elif st.session_state.step == "fixation":
     st.markdown("<h1 style='text-align:center; font-size:72px;'>+</h1>", unsafe_allow_html=True)
-    time.sleep(0.5)  # 500ms
-    st.session_state.step = "trial"
-    st.session_state.start_time = 0
-    st.experimental_rerun()
+    if time.time() - st.session_state.last_run > 0.5:  # 500 ms sonra geç
+        st.session_state.step = "trial"
+        st.session_state.start_time = 0
+        st.experimental_rerun()
+    else:
+        st.stop()
 
-# Oklar gösteriliyor (maksimum 1500ms tepki süresi)
 elif st.session_state.step == "trial" and st.session_state.trial_index < 20:
     if st.session_state.start_time == 0:
         st.session_state.dir = random.choice(["left", "right"])
@@ -64,8 +64,7 @@ elif st.session_state.step == "trial" and st.session_state.trial_index < 20:
         st.session_state.results.append([choice, st.session_state.dir, rt, result])
         st.session_state.trial_index += 1
         st.session_state.step = "fixation"
-        st.session_state.start_time = 0
-        st.session_state.waiting = False
+        st.session_state.last_run = time.time()
         st.experimental_rerun()
 
     with col1:
@@ -75,16 +74,13 @@ elif st.session_state.step == "trial" and st.session_state.trial_index < 20:
         if st.button("➡️ Sağ") and st.session_state.waiting:
             respond("right")
 
-    # Otomatik zaman aşımı: 1500ms içinde yanıt gelmezse "Yanıtsız"
     if st.session_state.waiting and time.time() - st.session_state.start_time > 1.5:
         st.session_state.results.append(["Yok", st.session_state.dir, "Yanıt yok", "Yanıtsız"])
         st.session_state.trial_index += 1
         st.session_state.step = "fixation"
-        st.session_state.start_time = 0
-        st.session_state.waiting = False
+        st.session_state.last_run = time.time()
         st.experimental_rerun()
 
-# Test bitti
 elif st.session_state.trial_index >= 20:
     st.success("✅ Test tamamlandı!")
     output = StringIO()
