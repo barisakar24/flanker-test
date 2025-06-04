@@ -20,13 +20,13 @@ try:
 except:
     st.warning("⚠️ SMTP ayarları bulunamadı. E-posta gönderimi devre dışı bırakıldı.")
 
-# HTML + JS (yönerge dahil)
+# HTML + JS (Tüm random kombinasyonlar ve müzik oynatma dahil)
 html_code = """
 <!DOCTYPE html>
-<html lang="tr">
+<html lang=\"tr\">
 <head>
-  <meta charset="UTF-8" />
-  <title>Flanker Testi</title>
+  <meta charset=\"UTF-8\" />
+  <title>Flanker Testi (Alpha 10 Hz)</title>
   <style>
     html, body {
       margin: 0; padding: 0;
@@ -42,7 +42,6 @@ html_code = """
       justify-content: center;
       height: 100vh;
       user-select: none;
-      padding: 20px;
     }
     #fixation, #arrow {
       font-size: 72px;
@@ -50,20 +49,10 @@ html_code = """
       width: 100%;
     }
     #startMessage {
-      font-size: 24px;
+      font-size: 20px;
       color: #333;
       text-align: center;
-      margin-bottom: 20px;
-    }
-    #instructions {
-      font-size: 18px;
-      color: #555;
-      max-width: 700px;
-      text-align: justify;
-      margin-bottom: 25px;
-      background-color: #f3f3f3;
-      padding: 15px;
-      border-radius: 10px;
+      margin: 20px;
     }
     button {
       font-size: 20px;
@@ -73,38 +62,40 @@ html_code = """
       background-color: #007BFF;
       color: white;
     }
-    #leftBtn {
+    #leftBtn, #rightBtn {
       position: absolute;
-      bottom: 20px;
-      left: 20px;
+      bottom: 10px;
+      width: 45%;
+    }
+    #leftBtn {
+      left: 5%;
     }
     #rightBtn {
-      position: absolute;
-      bottom: 20px;
-      right: 20px;
+      right: 5%;
     }
   </style>
 </head>
 <body>
-<audio id="bgAudio" loop autoplay>
-  <source src="https://barisakar24.github.io/flanker-test/Alpha_10Hz.wav" type="audio/wav">
+<audio id=\"bgAudio\" loop>
+  <source src=\"https://barisakar24.github.io/flanker-test/Alpha_10Hz.wav\" type=\"audio/wav\">
 </audio>
-<div id="container">
-  <div id="startScreen">
-    <div id="startMessage">🎧 Lütfen kulaklığınızı takın ve sessiz bir ortamda teste başlayın.</div>
-    <div id="instructions">
-      <b>Yönerge:</b> Testte ekranda önce bir <b>+ işareti</b> görünecek, ardından kısa bir süreliğine <b><<><<</b>, <b>>>></b> gibi semboller belirecektir.<br><br>
-      Sizin odaklanmanız gereken <b>ortadaki ok</b> yönüdür. Bu oka göre hareket edin:<br><br>
-      Eğer ortadaki ok <b>sağ</b>a bakıyorsa <b>sağ</b> butonuna, <b>sol</b>a bakıyorsa <b>sol</b> butonuna basın.<br><br>
-      <u>Hızlı ve doğru cevap vermeye çalışın.</u><br><br>
-      Arka planda odaklanmanıza yardımcı olacak <b>10 Hz Alpha dalgası</b> çalacaktır.
+<div id=\"container\">
+  <div id=\"startScreen\">
+    <div id=\"startMessage\">
+      🎧 Lütfen kulaklık takınız ve sesinizi açınız.<br><br>
+      Ekranda önce kısa süreliğine '+' işareti göreceksiniz.<br>
+      Ardından <<><<, <<<<< gibi ok dizileri belirecek.<br>
+      Ortadaki okun yönüne göre ⬅️ Sol veya ➡️ Sağ tuşuna basmalısınız.<br>
+      Cevaplarınızın doğruluğu ve tepki süreniz kaydedilecektir.<br>
+      Mümkün olduğunca hızlı ve doğru yanıt veriniz.<br><br>
+      <b>Teste başlamak için aşağıdaki butona tıklayınız.</b>
     </div>
-    <button id="startBtn">Teste Başla</button>
+    <button id=\"startBtn\">Teste Başla</button>
   </div>
-  <div id="fixation" style="display:none;">+</div>
-  <div id="arrow" style="display:none;"></div>
-  <button id="leftBtn" style="display:none;">⬅️ Sol</button>
-  <button id="rightBtn" style="display:none;">➡️ Sağ</button>
+  <div id=\"fixation\" style=\"display:none;\">+</div>
+  <div id=\"arrow\" style=\"display:none;\"></div>
+  <button id=\"leftBtn\" style=\"display:none;\">⬅️ Sol</button>
+  <button id=\"rightBtn\" style=\"display:none;\">➡️ Sağ</button>
 </div>
 <script>
 const trials = 20;
@@ -122,7 +113,11 @@ const startBtn = document.getElementById("startBtn");
 const startScreen = document.getElementById("startScreen");
 const leftBtn = document.getElementById("leftBtn");
 const rightBtn = document.getElementById("rightBtn");
-startBtn.onclick = () => { startScreen.style.display = "none"; nextFixation(); };
+startBtn.onclick = () => {
+  document.getElementById("bgAudio").play();
+  startScreen.style.display = "none";
+  nextFixation();
+};
 function nextFixation() {
   if (current >= trials) return finish();
   fixation.style.display = "block";
@@ -138,7 +133,8 @@ function showStimulus() {
   const pat = patterns[Math.floor(Math.random() * patterns.length)];
   arrow.innerText = pat;
   arrow.style.display = "block";
-  direction = pat.charAt(2) === ">" ? "right" : "left";  // Orta oka göre karar ver
+  const centerChar = pat.charAt(2);
+  direction = centerChar === "<" ? "left" : "right";
   startTime = performance.now();
   responded = false;
   setTimeout(() => {
@@ -160,8 +156,8 @@ leftBtn.onclick = () => handleResponse("left");
 rightBtn.onclick = () => handleResponse("right");
 function finish() {
   document.body.innerHTML = "<h2>✅ Test tamamlandı! Sonuçlar gönderiliyor...</h2>";
-  let csv = "Basılan,DoğruYön,RT(ms),Sonuç\\n";
-  results.forEach(r => { csv += r.join(",") + "\\n"; });
+  let csv = "Basılan,DoğruYön,RT(ms),Sonuç\n";
+  results.forEach(r => { csv += r.join(",") + "\n"; });
   const encoded = encodeURIComponent(csv);
   const iframe = document.createElement("iframe");
   iframe.style.display = "none";
@@ -174,7 +170,7 @@ function finish() {
 """
 
 # Embed HTML
-st_html(html_code, height=750)
+st_html(html_code, height=720)
 
 # JS→Python veri aktarımı ve mail
 if smtp_ready and "flanker_results_sent" not in st.session_state:
