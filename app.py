@@ -4,11 +4,10 @@ import smtplib
 from email.message import EmailMessage
 import urllib.parse
 
-# Sayfa ayarları
 st.set_page_config(page_title="Flanker Testi - Alpha", layout="wide")
 st.title("🧠 Flanker Testi (Alpha 10 Hz Müzik ile)")
 
-# SMTP ayarlarını kontrol et
+# SMTP kontrolü
 smtp_ready = False
 try:
     smtp_email = st.secrets["smtp"]["email"]
@@ -18,9 +17,8 @@ try:
     receiver_email = st.secrets["smtp"]["receiver"]
     smtp_ready = True
 except:
-    st.warning("⚠️ SMTP ayarları bulunamadı. E-posta gönderimi devre dışı.")
+    st.warning("⚠️ SMTP ayarları eksik. E-posta gönderimi pasif.")
 
-# HTML + JS: Test ekranı
 html_code = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -30,9 +28,10 @@ html_code = """
   <style>
     html, body {
       margin: 0; padding: 0;
-      background-color: white;
-      font-family: Arial, sans-serif;
-      height: 100vh; overflow: hidden;
+      background: white;
+      font-family: Arial;
+      height: 100vh;
+      overflow: hidden;
     }
     #container {
       position: relative;
@@ -41,17 +40,14 @@ html_code = """
       align-items: center;
       justify-content: center;
       height: 100vh;
-      user-select: none;
     }
     #fixation, #arrow {
       font-size: 72px;
       text-align: center;
-      width: 100%;
     }
     #startMessage {
       font-size: 24px;
-      color: #333;
-      text-align: center;
+      margin-bottom: 20px;
     }
     button {
       font-size: 20px;
@@ -74,12 +70,14 @@ html_code = """
   </style>
 </head>
 <body>
-<audio id="bgAudio" loop autoplay>
-  <source src="https://barisakar24.github.io/Alpha_10Hz.wav" type="audio/wav">
+
+<audio id="bgAudio" loop>
+  <source src="https://barisakar24.github.io/flanker-test/Alpha_10Hz.wav" type="audio/wav">
 </audio>
+
 <div id="container">
   <div id="startScreen">
-    <div id="startMessage">🎧 Lütfen sesinizi açın ve “Teste Başla” tuşuna basın.</div>
+    <div id="startMessage">🎧 Lütfen sesinizi açın ve “Teste Başla” butonuna basın.</div>
     <button id="startBtn">Teste Başla</button>
   </div>
   <div id="fixation" style="display:none;">+</div>
@@ -87,6 +85,7 @@ html_code = """
   <button id="leftBtn" style="display:none;">⬅️ Sol</button>
   <button id="rightBtn" style="display:none;">➡️ Sağ</button>
 </div>
+
 <script>
 const trials = 20;
 const fixationDuration = 300;
@@ -97,15 +96,18 @@ let results = [];
 let direction = "";
 let startTime = 0;
 let responded = false;
+
 const fixation = document.getElementById("fixation");
 const arrow = document.getElementById("arrow");
 const leftBtn = document.getElementById("leftBtn");
 const rightBtn = document.getElementById("rightBtn");
+const audio = document.getElementById("bgAudio");
 
 document.addEventListener("DOMContentLoaded", function () {
   const startBtn = document.getElementById("startBtn");
   const startScreen = document.getElementById("startScreen");
   startBtn.onclick = () => {
+    audio.play();  // Ses başlat
     startScreen.style.display = "none";
     nextFixation();
   };
@@ -161,14 +163,15 @@ function finish() {
   document.body.appendChild(iframe);
 }
 </script>
+
 </body>
 </html>
 """
 
 # HTML gömme
-html(html_code, height=700, scrolling=False)
+html(html_code, height=720, scrolling=False)
 
-# JS'ten gelen sonuç varsa işle
+# E-posta gönderimi
 if smtp_ready and "flanker_results_sent" not in st.session_state:
     st.session_state["flanker_results_sent"] = False
 
