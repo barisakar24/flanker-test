@@ -130,7 +130,7 @@ html_code = f"""
     // ===== Sabitler =====
     const totalTrials       = 20;
     const fixationDuration  = 500;   // ms
-    const stimulusDuration  = 150;   // ms (arrow)
+    const stimulusDuration  = 50;   // ms (arrow)
     const patterns          = ["<<<<<", ">>>>>", "<<><<", ">><>>"];
 
     let trialIndex          = 0;
