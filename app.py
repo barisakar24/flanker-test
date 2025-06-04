@@ -158,26 +158,27 @@ function finish() {
 st_html(html_code, height=700)
 
 # JS→Python veri aktarımı ve mail
-if smtp_ready and "flanker_results_sent" not in st.session_state:
-    st.session_state["flanker_results_sent"] = False
+def parse_and_send():
+    if smtp_ready and "flanker_results_sent" not in st.session_state:
+        st.session_state["flanker_results_sent"] = False
 
-if smtp_ready and not st.session_state["flanker_results_sent"]:
-    params = st.query_params
-    if "flanker_results" in params:
-        csv_data = urllib.parse.unquote(params["flanker_results"])
-        if csv_data.startswith("data:text/csv;charset=utf-8,"):
-            csv_data = csv_data[len("data:text/csv;charset=utf-8,"):]
-        try:
-            msg = EmailMessage()
-            msg["Subject"] = "Yeni Flanker Test Sonuçları"
-            msg["From"] = smtp_email
-            msg["To"] = receiver_email
-            msg.set_content(csv_data)
-            with smtplib.SMTP(smtp_server, smtp_port) as server:
-                server.starttls()
-                server.login(smtp_email, smtp_password)
-                server.send_message(msg)
-            st.success("✅ Sonuçlar e-posta ile gönderildi.")
-            st.session_state["flanker_results_sent"] = True
-        except Exception as e:
-            st.error(f"❌ E-posta gönderilemedi: {e}")
+    if smtp_ready and not st.session_state["flanker_results_sent"]:
+        params = st.query_params
+        if "flanker_results" in params:
+            csv_data = urllib.parse.unquote(params["flanker_results"])
+            try:
+                msg = EmailMessage()
+                msg["Subject"] = "Yeni Flanker Test Sonuçları"
+                msg["From"] = smtp_email
+                msg["To"] = receiver_email
+                msg.set_content(csv_data)
+                with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    server.starttls()
+                    server.login(smtp_email, smtp_password)
+                    server.send_message(msg)
+                st.success("✅ Sonuçlar e-posta ile gönderildi.")
+                st.session_state["flanker_results_sent"] = True
+            except Exception as e:
+                st.error(f"❌ E-posta gönderilemedi: {e}")
+
+parse_and_send()
