@@ -1,60 +1,40 @@
 import streamlit as st
 from streamlit.components.v1 import html as st_html
-import base64
 import smtplib
 from email.message import EmailMessage
+import urllib.parse
 
-# —————————————————————————————————————————————————————————
-# 1) Streamlit Sayfa Ayarları
-# —————————————————————————————————————————————————————————
+# Sayfa ayarları
 st.set_page_config(page_title="Flanker Testi - Alpha", layout="wide")
 st.title("🧠 Flanker Testi (Alpha 10 Hz Müzik ile)")
 
-# —————————————————————————————————————————————————————————
-# 2) E-posta Ayarları (Secrets varsa, yoksa pas geçecek)
-# —————————————————————————————————————————————————————————
-use_smtp = False
+# SMTP ayarları kontrolü
+smtp_ready = False
 try:
-    smtp_email     = st.secrets["smtp"]["email"]
-    smtp_password  = st.secrets["smtp"]["password"]
-    smtp_server    = st.secrets["smtp"]["smtp_server"]
-    smtp_port      = st.secrets["smtp"]["smtp_port"]
+    smtp_email = st.secrets["smtp"]["email"]
+    smtp_password = st.secrets["smtp"]["password"]
+    smtp_server = st.secrets["smtp"]["smtp_server"]
+    smtp_port = st.secrets["smtp"]["smtp_port"]
     receiver_email = st.secrets["smtp"]["receiver"]
-    use_smtp = True
-except KeyError:
+    smtp_ready = True
+except:
     st.warning("⚠️ SMTP ayarları bulunamadı. E-posta gönderimi devre dışı bırakıldı.")
-    use_smtp = False
 
-# —————————————————————————————————————————————————————————
-# 3) HTML + JavaScript (Mobil uyumlu, alt köşede butonlar, zamanlama JS ile)
-#
-#    – Fixation: 500 ms (+ işareti)
-#    – Arrow stimulus: 150 ms
-#    – Ardından alt köşe butonlar ekranda kullanıcı tıklayana kadar bekleyecek
-#    – Dört farklı paterni (“<<<<<”, “>>>>>”, “<<><<”, “>><>>”) kesin göreceksiniz
-#    – 20 trial tamamlandığında sonuçları Python’a postMessage ile yollayacak
-#    – Müzik base64 olarak embed edildi, kesinlikle çalacak
-# —————————————————————————————————————————————————————————
-
-# 3A) Alpha_10Hz.wav dosyasını base64’e çeviriyoruz
-with open("Alpha_10Hz.wav", "rb") as f:
-    audio_bytes = f.read()
-audio_b64 = base64.b64encode(audio_bytes).decode()
-
-html_code = f"""
+# HTML + JS (Tüm random kombinasyonlar ve müzik oynatma dahil)
+html_code = """
 <!DOCTYPE html>
-<html lang="tr">
+<html lang=\"tr\">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset=\"UTF-8\" />
   <title>Flanker Testi (Alpha 10 Hz)</title>
   <style>
-    html, body {{
+    html, body {
       margin: 0; padding: 0;
       background-color: white;
       font-family: Arial, sans-serif;
       height: 100vh; overflow: hidden;
-    }}
-    #container {{
+    }
+    #container {
       position: relative;
       display: flex;
       flex-direction: column;
@@ -62,260 +42,142 @@ html_code = f"""
       justify-content: center;
       height: 100vh;
       user-select: none;
-    }}
-    #fixation, #arrow {{
+    }
+    #fixation, #arrow {
       font-size: 72px;
       text-align: center;
       width: 100%;
-    }}
-    #startMessage {{
+    }
+    #startMessage {
       font-size: 24px;
       color: #333;
       text-align: center;
-    }}
-    button {{
+    }
+    button {
       font-size: 20px;
       padding: 10px 20px;
-      margin: 10px;
       border: none;
       border-radius: 8px;
       background-color: #007BFF;
       color: white;
-    }}
-    button:active {{
-      background-color: #0056b3;
-    }}
-    /* Alt köşe butonları */
-    #leftBtn {{
+    }
+    #leftBtn {
       position: absolute;
       bottom: 20px;
       left: 20px;
-    }}
-    #rightBtn {{
+    }
+    #rightBtn {
       position: absolute;
       bottom: 20px;
       right: 20px;
-    }}
+    }
   </style>
 </head>
 <body>
-
-  <!-- 1) Müzik (loop) – base64 olarak embed ediliyor -->
-  <audio id="bgAudio" loop>
-    <source src="data:audio/wav;base64,{audio_b64}" type="audio/wav" />
-    Tarayıcınız ses çalmayı desteklemiyor.
-  </audio>
-
-  <div id="container">
-    <!-- Başlangıç ekranı -->
-    <div id="startScreen">
-      <div id="startMessage">🎧 Lütfen sesi açın ve “Teste Başla” tuşuna basın.</div>
-      <button id="startBtn">Teste Başla</button>
-    </div>
-
-    <!-- Fixation: “+” -->
-    <div id="fixation" style="display:none;">+</div>
-
-    <!-- Arrow stimulus -->
-    <div id="arrow" style="display:none;"></div>
-
-    <!-- Alt köşe butonları -->
-    <button id="leftBtn" style="display:none;">⬅️ Sol</button>
-    <button id="rightBtn" style="display:none;">➡️ Sağ</button>
-
-    <!-- Sonuçları Python’a postMessage için gizli link -->
-    <a id="downloadLink" style="display:none;"></a>
+<audio id=\"bgAudio\" loop autoplay>
+  <source src=\"https://barisakar24.github.io/flanker/Alpha_10Hz.wav\" type=\"audio/wav\">
+</audio>
+<div id=\"container\">
+  <div id=\"startScreen\">
+    <div id=\"startMessage\">🎧 Lütfen sesinizi açın ve “Teste Başla” tuşuna basın.</div>
+    <button id=\"startBtn\">Teste Başla</button>
   </div>
-
-  <script>
-    // ===== Sabitler =====
-    const totalTrials       = 20;
-    const fixationDuration  = 500;   // ms
-    const stimulusDuration  = 150;   // ms
-    const patterns          = ["<<<<<", ">>>>>", "<<><<", ">><>>"];
-
-    let trialIndex          = 0;
-    let results             = [];   // [[choice, correctDir, RT(ms), outcome], ...]
-
-    let currentPattern      = "";
-    let stimulusStartTime   = 0;
-    let responded           = false;
-
-    // ===== DOM Elementleri =====
-    const bgAudio      = document.getElementById("bgAudio");
-    const startScreen  = document.getElementById("startScreen");
-    const startBtn     = document.getElementById("startBtn");
-    const fixationEl   = document.getElementById("fixation");
-    const arrowEl      = document.getElementById("arrow");
-    const leftBtn      = document.getElementById("leftBtn");
-    const rightBtn     = document.getElementById("rightBtn");
-    const downloadLink = document.getElementById("downloadLink");
-    const container    = document.getElementById("container");
-
-    // ===== “Teste Başla” butonuna tıklanınca =====
-    startBtn.addEventListener("click", () => {{
-      bgAudio.play();               // Müzik çalmaya başla
-      startScreen.style.display = "none";
-      runFixation();
-    }});
-
-    // ===== Fixation: 500 ms “+” =====
-    function runFixation() {{
-      fixationEl.style.display = "block";
-      arrowEl.style.display    = "none";
-      leftBtn.style.display    = "none";
-      rightBtn.style.display   = "none";
-
-      setTimeout(() => {{
-        fixationEl.style.display = "none";
-        runStimulus();
-      }}, fixationDuration);
-    }}
-
-    // ===== Arrow stimulus: 150 ms =====
-    function runStimulus() {{
-      if (trialIndex >= totalTrials) {{
-        finishTest();
-        return;
-      }}
-
-      // 1) Rastgele bir paterni seç
-      currentPattern = patterns[Math.floor(Math.random() * patterns.length)];
-
-      // 2) Arrow’u ekranda göster
-      arrowEl.innerText = currentPattern;
-      arrowEl.style.display  = "block";
-      leftBtn.style.display  = "none";
-      rightBtn.style.display = "none";
-
-      // 3) RT ölçümünü başlat
-      stimulusStartTime = performance.now();
-      responded = false;
-
-      // 4) 150 ms sonra arrow’u gizle, butonları göster → boş ekran moduna geç
-      setTimeout(() => {{
-        arrowEl.style.display = "none";
-        leftBtn.style.display  = "block";
-        rightBtn.style.display = "block";
-        attachHandlers();
-      }}, stimulusDuration);
-    }}
-
-    // ===== “Sol”/“Sağ” butonlarının tıklanmasını dinle =====
-    function attachHandlers() {{
-      leftBtn.onclick = () => {{
-        if (!responded) {{
-          responded = true;
-          const rt = Math.round(performance.now() - stimulusStartTime);
-          // Ortadaki karakteri kontrol et (index 2)
-          const correctDir = (currentPattern[2] === "<") ? "left" : "right";
-          const outcome    = (correctDir === "left") ? "Doğru" : "Hatalı";
-          results.push(["left", correctDir, rt, outcome]);
-          cleanupAndNext();
-        }}
-      }};
-
-      rightBtn.onclick = () => {{
-        if (!responded) {{
-          responded = true;
-          const rt = Math.round(performance.now() - stimulusStartTime);
-          const correctDir = (currentPattern[2] === "<") ? "left" : "right";
-          const outcome    = (correctDir === "right") ? "Doğru" : "Hatalı";
-          results.push(["right", correctDir, rt, outcome]);
-          cleanupAndNext();
-        }}
-      }};
-    }}
-
-    // ===== Trial tamamlanınca temizle ve bir sonraki fixation’a geç =====
-    function cleanupAndNext() {{
-      leftBtn.style.display  = "none";
-      rightBtn.style.display = "none";
-      trialIndex++;
-      setTimeout(runFixation, 100); // Kısa gecikme sonrası yeni fixation
-    }}
-
-    // ===== 20 trial bittiğinde sonuçları Python’a gönder =====
-    function finishTest() {{
-      fixationEl.style.display = "none";
-      arrowEl.style.display    = "none";
-      leftBtn.style.display    = "none";
-      rightBtn.style.display   = "none";
-
-      // “Test tamamlandı” mesajı
-      const msg = document.createElement("div");
-      msg.innerHTML = "<h2>✅ Test tamamlandı!</h2>";
-      msg.style.marginTop = "30px";
-      container.appendChild(msg);
-
-      // 1) CSV verisini hazırla
-      let csvContent = "data:text/csv;charset=utf-8,";
-      csvContent += ["Basılan","DoğruYön","RT(ms)","Sonuç"].join(",") + "\\r\\n";
-      results.forEach(row => {{
-        csvContent += row.join(",") + "\\r\\n";
-      }});
-
-      // 2) CSV’yi URI encode edip postMessage ile Python’a gönder
-      const encodedUri = encodeURI(csvContent);
-      window.parent.postMessage(
-        {{ type: "flanker_results", data: encodedUri }},
-        "*"
-      );
-
-      // 3) Gizli indirme linkini hazırla (kullanıcı görmeyecek)
-      downloadLink.href = encodedUri;
-      downloadLink.download = "flanker_alpha_sonuclar.csv";
-      downloadLink.style.display = "none";
-    }}
-  </script>
-
+  <div id=\"fixation\" style=\"display:none;\">+</div>
+  <div id=\"arrow\" style=\"display:none;\"></div>
+  <button id=\"leftBtn\" style=\"display:none;\">⬅️ Sol</button>
+  <button id=\"rightBtn\" style=\"display:none;\">➡️ Sağ</button>
+</div>
+<script>
+const trials = 20;
+const fixationDuration = 300;
+const stimulusDuration = 200;
+const patterns = ["<<<<<", ">>>>>", "<<><<", ">><>>"];
+let current = 0;
+let results = [];
+let direction = "";
+let startTime = 0;
+let responded = false;
+const fixation = document.getElementById("fixation");
+const arrow = document.getElementById("arrow");
+const startBtn = document.getElementById("startBtn");
+const startScreen = document.getElementById("startScreen");
+const leftBtn = document.getElementById("leftBtn");
+const rightBtn = document.getElementById("rightBtn");
+startBtn.onclick = () => { startScreen.style.display = "none"; nextFixation(); };
+function nextFixation() {
+  if (current >= trials) return finish();
+  fixation.style.display = "block";
+  arrow.style.display = "none";
+  leftBtn.style.display = "none";
+  rightBtn.style.display = "none";
+  setTimeout(() => {
+    fixation.style.display = "none";
+    showStimulus();
+  }, fixationDuration);
+}
+function showStimulus() {
+  const pat = patterns[Math.floor(Math.random() * patterns.length)];
+  arrow.innerText = pat;
+  arrow.style.display = "block";
+  direction = (pat.includes("<")) ? "left" : "right";
+  startTime = performance.now();
+  responded = false;
+  setTimeout(() => {
+    arrow.style.display = "none";
+    leftBtn.style.display = "block";
+    rightBtn.style.display = "block";
+  }, stimulusDuration);
+}
+function handleResponse(choice) {
+  if (responded) return;
+  responded = true;
+  const rt = Math.round(performance.now() - startTime);
+  const correct = (choice === direction) ? "Doğru" : "Hatalı";
+  results.push([choice, direction, rt, correct]);
+  current++;
+  setTimeout(nextFixation, 100);
+}
+leftBtn.onclick = () => handleResponse("left");
+rightBtn.onclick = () => handleResponse("right");
+function finish() {
+  document.body.innerHTML = "<h2>✅ Test tamamlandı! Sonuçlar gönderiliyor...</h2>";
+  let csv = "Basılan,DoğruYön,RT(ms),Sonuç\n";
+  results.forEach(r => { csv += r.join(",") + "\n"; });
+  const encoded = encodeURIComponent(csv);
+  const iframe = document.createElement("iframe");
+  iframe.style.display = "none";
+  iframe.src = "?flanker_results=" + encoded;
+  document.body.appendChild(iframe);
+}
+</script>
 </body>
 </html>
 """
 
-# —————————————————————————————————————————————————————————
-# 4) Yukarıdaki HTML+JS’i Streamlit içine göm
-# —————————————————————————————————————————————————————————
-st_html(html_code, height=800, scrolling=True)
+# Embed HTML
+st_html(html_code, height=700)
 
-# —————————————————————————————————————————————————————————
-# 5) JS → Python’ve postMessage köprüsünü dinle, st.query_params kullan
-# —————————————————————————————————————————————————————————
-if "flanker_sent" not in st.session_state:
-    st.session_state["flanker_sent"] = False
+# JS→Python veri aktarımı ve mail
+if smtp_ready and "flanker_results_sent" not in st.session_state:
+    st.session_state["flanker_results_sent"] = False
 
-def receive_results():
+if smtp_ready and not st.session_state["flanker_results_sent"]:
     params = st.query_params
-    if "flanker_results" in params and not st.session_state["flanker_sent"]:
-        encoded_csv = params["flanker_results"][0]
-        import urllib.parse
-        decoded = urllib.parse.unquote(encoded_csv)
-
-        # “data:text/csv;charset=utf-8,” prefix’ini kaldır
-        const prefix = "data:text/csv;charset=utf-8,"
-        if decoded.startswith(prefix):
-            decoded = decoded[len(prefix):]
-
-        # E-posta gönderimi varsa yap
-        if use_smtp:
-            try:
-                msg = EmailMessage()
-                msg["Subject"] = "Yeni Flanker Alpha Test Sonuçları"
-                msg["From"]    = smtp_email
-                msg["To"]      = receiver_email
-                msg.set_content(decoded)
-
-                with smtplib.SMTP(smtp_server, smtp_port) as server:
-                    server.starttls()
-                    server.login(smtp_email, smtp_password)
-                    server.send_message(msg)
-
-                st.success("✅ Sonuçlar e-posta ile gönderildi.")
-            except Exception as e:
-                st.error(f"❌ E-posta gönderilirken hata: {e}")
-        else:
-            st.info("ℹ️ SMTP yapılmadığı için sonuçlar e-posta gönderilmedi.")
-
-        st.session_state["flanker_sent"] = True
-
-receive_results()
+    if "flanker_results" in params:
+        csv_data = urllib.parse.unquote(params["flanker_results"])
+        if csv_data.startswith("data:text/csv;charset=utf-8,"):
+            csv_data = csv_data[len("data:text/csv;charset=utf-8,"):]
+        try:
+            msg = EmailMessage()
+            msg["Subject"] = "Yeni Flanker Test Sonuçları"
+            msg["From"] = smtp_email
+            msg["To"] = receiver_email
+            msg.set_content(csv_data)
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_email, smtp_password)
+                server.send_message(msg)
+            st.success("✅ Sonuçlar e-posta ile gönderildi.")
+            st.session_state["flanker_results_sent"] = True
+        except Exception as e:
+            st.error(f"❌ E-posta gönderilemedi: {e}")
