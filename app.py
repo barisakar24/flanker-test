@@ -20,26 +20,13 @@ try:
 except:
     st.warning("⚠️ SMTP ayarları bulunamadı. E-posta gönderimi devre dışı bırakıldı.")
 
-# Açıklayıcı yönerge
-st.markdown("""
-### 🧾 Yönerge
-
-- Ekranda önce **+ işareti** görünecek.
-- Ardından "<<><<", ">><>>" gibi **ok desenleri** çıkacak.
-- **Tam ortadaki oka dikkat edin.** Örneğin:
-  - `<<>>>` deseninde ortadaki `>` sağa bakar
-  - `>><>>` deseninde ortadaki `<` sola bakar
-- Sadece ortadaki oka göre hızlıca **Sol (⬅️)** veya **Sağ (➡️)** butonuna basın.
-- 🎧 Arka planda **Alpha (10 Hz) müziği** çalacaktır. Odaklanmanız kolaylaşacaktır.
-""")
-
-# HTML + JS kod (yeni)
+# HTML + JS (yönerge dahil)
 html_code = """
 <!DOCTYPE html>
-<html lang=\"tr\">
+<html lang="tr">
 <head>
-  <meta charset=\"UTF-8\" />
-  <title>Flanker Testi (Alpha 10 Hz)</title>
+  <meta charset="UTF-8" />
+  <title>Flanker Testi</title>
   <style>
     html, body {
       margin: 0; padding: 0;
@@ -55,6 +42,7 @@ html_code = """
       justify-content: center;
       height: 100vh;
       user-select: none;
+      padding: 20px;
     }
     #fixation, #arrow {
       font-size: 72px;
@@ -65,6 +53,17 @@ html_code = """
       font-size: 24px;
       color: #333;
       text-align: center;
+      margin-bottom: 20px;
+    }
+    #instructions {
+      font-size: 18px;
+      color: #555;
+      max-width: 700px;
+      text-align: justify;
+      margin-bottom: 25px;
+      background-color: #f3f3f3;
+      padding: 15px;
+      border-radius: 10px;
     }
     button {
       font-size: 20px;
@@ -87,18 +86,25 @@ html_code = """
   </style>
 </head>
 <body>
-<audio id=\"bgAudio\" loop autoplay>
-  <source src=\"https://barisakar24.github.io/flanker-test/Alpha_10Hz.wav\" type=\"audio/wav\">
+<audio id="bgAudio" loop autoplay>
+  <source src="https://barisakar24.github.io/flanker-test/Alpha_10Hz.wav" type="audio/wav">
 </audio>
-<div id=\"container\">
-  <div id=\"startScreen\">
-    <div id=\"startMessage\">🎧 Sesiniz açık olsun. “Teste Başla” tuşuna basın.</div>
-    <button id=\"startBtn\">Teste Başla</button>
+<div id="container">
+  <div id="startScreen">
+    <div id="startMessage">🎧 Lütfen kulaklığınızı takın ve sessiz bir ortamda teste başlayın.</div>
+    <div id="instructions">
+      <b>Yönerge:</b> Testte ekranda önce bir <b>+ işareti</b> görünecek, ardından kısa bir süreliğine <b><<><<</b>, <b>>>></b> gibi semboller belirecektir.<br><br>
+      Sizin odaklanmanız gereken <b>ortadaki ok</b> yönüdür. Bu oka göre hareket edin:<br><br>
+      Eğer ortadaki ok <b>sağ</b>a bakıyorsa <b>sağ</b> butonuna, <b>sol</b>a bakıyorsa <b>sol</b> butonuna basın.<br><br>
+      <u>Hızlı ve doğru cevap vermeye çalışın.</u><br><br>
+      Arka planda odaklanmanıza yardımcı olacak <b>10 Hz Alpha dalgası</b> çalacaktır.
+    </div>
+    <button id="startBtn">Teste Başla</button>
   </div>
-  <div id=\"fixation\" style=\"display:none;\">+</div>
-  <div id=\"arrow\" style=\"display:none;\"></div>
-  <button id=\"leftBtn\" style=\"display:none;\">⬅️ Sol</button>
-  <button id=\"rightBtn\" style=\"display:none;\">➡️ Sağ</button>
+  <div id="fixation" style="display:none;">+</div>
+  <div id="arrow" style="display:none;"></div>
+  <button id="leftBtn" style="display:none;">⬅️ Sol</button>
+  <button id="rightBtn" style="display:none;">➡️ Sağ</button>
 </div>
 <script>
 const trials = 20;
@@ -116,14 +122,7 @@ const startBtn = document.getElementById("startBtn");
 const startScreen = document.getElementById("startScreen");
 const leftBtn = document.getElementById("leftBtn");
 const rightBtn = document.getElementById("rightBtn");
-
-function getCenterDirection(pattern) {
-  const mid = Math.floor(pattern.length / 2);
-  return pattern[mid] === "<" ? "left" : "right";
-}
-
 startBtn.onclick = () => { startScreen.style.display = "none"; nextFixation(); };
-
 function nextFixation() {
   if (current >= trials) return finish();
   fixation.style.display = "block";
@@ -135,12 +134,11 @@ function nextFixation() {
     showStimulus();
   }, fixationDuration);
 }
-
 function showStimulus() {
   const pat = patterns[Math.floor(Math.random() * patterns.length)];
   arrow.innerText = pat;
   arrow.style.display = "block";
-  direction = getCenterDirection(pat);
+  direction = pat.charAt(2) === ">" ? "right" : "left";  // Orta oka göre karar ver
   startTime = performance.now();
   responded = false;
   setTimeout(() => {
@@ -149,7 +147,6 @@ function showStimulus() {
     rightBtn.style.display = "block";
   }, stimulusDuration);
 }
-
 function handleResponse(choice) {
   if (responded) return;
   responded = true;
@@ -159,14 +156,12 @@ function handleResponse(choice) {
   current++;
   setTimeout(nextFixation, 100);
 }
-
 leftBtn.onclick = () => handleResponse("left");
 rightBtn.onclick = () => handleResponse("right");
-
 function finish() {
   document.body.innerHTML = "<h2>✅ Test tamamlandı! Sonuçlar gönderiliyor...</h2>";
-  let csv = "Basılan,DoğruYön,RT(ms),Sonuç\n";
-  results.forEach(r => { csv += r.join(",") + "\n"; });
+  let csv = "Basılan,DoğruYön,RT(ms),Sonuç\\n";
+  results.forEach(r => { csv += r.join(",") + "\\n"; });
   const encoded = encodeURIComponent(csv);
   const iframe = document.createElement("iframe");
   iframe.style.display = "none";
@@ -179,7 +174,7 @@ function finish() {
 """
 
 # Embed HTML
-dummy = st_html(html_code, height=700)
+st_html(html_code, height=750)
 
 # JS→Python veri aktarımı ve mail
 if smtp_ready and "flanker_results_sent" not in st.session_state:
@@ -189,13 +184,14 @@ if smtp_ready and not st.session_state["flanker_results_sent"]:
     params = st.query_params
     if "flanker_results" in params:
         csv_data = urllib.parse.unquote(params["flanker_results"])
+        if csv_data.startswith("data:text/csv;charset=utf-8,"):
+            csv_data = csv_data[len("data:text/csv;charset=utf-8,"):]
         try:
             msg = EmailMessage()
             msg["Subject"] = "Yeni Flanker Test Sonuçları"
             msg["From"] = smtp_email
             msg["To"] = receiver_email
-            msg.set_content("Flanker Testi Sonuçları ektedir.")
-            msg.add_attachment(csv_data.encode("utf-8"), filename="flanker_sonuc.csv", maintype="text", subtype="csv")
+            msg.set_content(csv_data)
             with smtplib.SMTP(smtp_server, smtp_port) as server:
                 server.starttls()
                 server.login(smtp_email, smtp_password)
@@ -204,4 +200,3 @@ if smtp_ready and not st.session_state["flanker_results_sent"]:
             st.session_state["flanker_results_sent"] = True
         except Exception as e:
             st.error(f"❌ E-posta gönderilemedi: {e}")
-            
