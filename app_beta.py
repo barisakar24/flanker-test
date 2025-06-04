@@ -1,4 +1,3 @@
-# app_beta.py
 import streamlit as st
 from streamlit.components.v1 import html as st_html
 import smtplib
@@ -129,24 +128,24 @@ function finish() {
 
 st_html(html_code, height=700)
 
-if smtp_ready and \"flanker_results_sent\" not in st.session_state:
-    st.session_state[\"flanker_results_sent\"] = False
+if smtp_ready and "flanker_results_sent" not in st.session_state:
+    st.session_state["flanker_results_sent"] = False
 
-if smtp_ready and not st.session_state[\"flanker_results_sent\"]:
+if smtp_ready and not st.session_state["flanker_results_sent"]:
     params = st.query_params
-    if \"flanker_results\" in params:
-        csv_data = urllib.parse.unquote(params[\"flanker_results\"])
+    if "flanker_results" in params:
+        csv_data = urllib.parse.unquote(params["flanker_results"])
         try:
             msg = EmailMessage()
-            msg[\"Subject\"] = \"Yeni Flanker Test (Beta) Sonuçları\"
-            msg[\"From\"] = smtp_email
-            msg[\"To\"] = receiver_email
+            msg["Subject"] = "Yeni Flanker Test (Beta) Sonuçları"
+            msg["From"] = smtp_email
+            msg["To"] = receiver_email
             msg.set_content(csv_data)
             with smtplib.SMTP(smtp_server, smtp_port) as server:
                 server.starttls()
                 server.login(smtp_email, smtp_password)
                 server.send_message(msg)
-            st.success(\"✅ Sonuçlar e-posta ile gönderildi.\")
-            st.session_state[\"flanker_results_sent\"] = True
+            st.success("✅ Sonuçlar e-posta ile gönderildi.")
+            st.session_state["flanker_results_sent"] = True
         except Exception as e:
-            st.error(f\"❌ E-posta gönderilemedi: {e}\")
+            st.error(f"❌ E-posta gönderilemedi: {e}")
