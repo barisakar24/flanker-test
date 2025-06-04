@@ -1,13 +1,14 @@
 import streamlit as st
-from streamlit.components.v1 import html
+from streamlit.components.v1 import html as st_html
 import smtplib
 from email.message import EmailMessage
 import urllib.parse
 
+# Sayfa ayarları
 st.set_page_config(page_title="Flanker Testi - Alpha", layout="wide")
 st.title("🧠 Flanker Testi (Alpha 10 Hz Müzik ile)")
 
-# SMTP kontrolü
+# SMTP ayarları kontrolü
 smtp_ready = False
 try:
     smtp_email = st.secrets["smtp"]["email"]
@@ -17,21 +18,34 @@ try:
     receiver_email = st.secrets["smtp"]["receiver"]
     smtp_ready = True
 except:
-    st.warning("⚠️ SMTP ayarları eksik. E-posta gönderimi pasif.")
+    st.warning("⚠️ SMTP ayarları bulunamadı. E-posta gönderimi devre dışı bırakıldı.")
 
+# Açıklayıcı yönerge
+st.markdown("""
+### 🧾 Yönerge
+
+- Ekranda önce **+ işareti** görünecek.
+- Ardından "<<><<", ">><>>" gibi **ok desenleri** çıkacak.
+- **Tam ortadaki oka dikkat edin.** Örneğin:
+  - `<<>>>` deseninde ortadaki `>` sağa bakar
+  - `>><>>` deseninde ortadaki `<` sola bakar
+- Sadece ortadaki oka göre hızlıca **Sol (⬅️)** veya **Sağ (➡️)** butonuna basın.
+- 🎧 Arka planda **Alpha (10 Hz) müziği** çalacaktır. Odaklanmanız kolaylaşacaktır.
+""")
+
+# HTML + JS kod (yeni)
 html_code = """
 <!DOCTYPE html>
-<html lang="tr">
+<html lang=\"tr\">
 <head>
-  <meta charset="UTF-8" />
-  <title>Flanker Testi</title>
+  <meta charset=\"UTF-8\" />
+  <title>Flanker Testi (Alpha 10 Hz)</title>
   <style>
     html, body {
       margin: 0; padding: 0;
-      background: white;
-      font-family: Arial;
-      height: 100vh;
-      overflow: hidden;
+      background-color: white;
+      font-family: Arial, sans-serif;
+      height: 100vh; overflow: hidden;
     }
     #container {
       position: relative;
@@ -40,14 +54,17 @@ html_code = """
       align-items: center;
       justify-content: center;
       height: 100vh;
+      user-select: none;
     }
     #fixation, #arrow {
       font-size: 72px;
       text-align: center;
+      width: 100%;
     }
     #startMessage {
       font-size: 24px;
-      margin-bottom: 20px;
+      color: #333;
+      text-align: center;
     }
     button {
       font-size: 20px;
@@ -70,22 +87,19 @@ html_code = """
   </style>
 </head>
 <body>
-
-<audio id="bgAudio" loop>
-  <source src="https://barisakar24.github.io/flanker-test/Alpha_10Hz.wav" type="audio/wav">
+<audio id=\"bgAudio\" loop autoplay>
+  <source src=\"https://barisakar24.github.io/flanker-test/Alpha_10Hz.wav\" type=\"audio/wav\">
 </audio>
-
-<div id="container">
-  <div id="startScreen">
-    <div id="startMessage">🎧 Lütfen sesinizi açın ve “Teste Başla” butonuna basın.</div>
-    <button id="startBtn">Teste Başla</button>
+<div id=\"container\">
+  <div id=\"startScreen\">
+    <div id=\"startMessage\">🎧 Sesiniz açık olsun. “Teste Başla” tuşuna basın.</div>
+    <button id=\"startBtn\">Teste Başla</button>
   </div>
-  <div id="fixation" style="display:none;">+</div>
-  <div id="arrow" style="display:none;"></div>
-  <button id="leftBtn" style="display:none;">⬅️ Sol</button>
-  <button id="rightBtn" style="display:none;">➡️ Sağ</button>
+  <div id=\"fixation\" style=\"display:none;\">+</div>
+  <div id=\"arrow\" style=\"display:none;\"></div>
+  <button id=\"leftBtn\" style=\"display:none;\">⬅️ Sol</button>
+  <button id=\"rightBtn\" style=\"display:none;\">➡️ Sağ</button>
 </div>
-
 <script>
 const trials = 20;
 const fixationDuration = 300;
@@ -96,22 +110,19 @@ let results = [];
 let direction = "";
 let startTime = 0;
 let responded = false;
-
 const fixation = document.getElementById("fixation");
 const arrow = document.getElementById("arrow");
+const startBtn = document.getElementById("startBtn");
+const startScreen = document.getElementById("startScreen");
 const leftBtn = document.getElementById("leftBtn");
 const rightBtn = document.getElementById("rightBtn");
-const audio = document.getElementById("bgAudio");
 
-document.addEventListener("DOMContentLoaded", function () {
-  const startBtn = document.getElementById("startBtn");
-  const startScreen = document.getElementById("startScreen");
-  startBtn.onclick = () => {
-    audio.play();  // Ses başlat
-    startScreen.style.display = "none";
-    nextFixation();
-  };
-});
+function getCenterDirection(pattern) {
+  const mid = Math.floor(pattern.length / 2);
+  return pattern[mid] === "<" ? "left" : "right";
+}
+
+startBtn.onclick = () => { startScreen.style.display = "none"; nextFixation(); };
 
 function nextFixation() {
   if (current >= trials) return finish();
@@ -129,7 +140,7 @@ function showStimulus() {
   const pat = patterns[Math.floor(Math.random() * patterns.length)];
   arrow.innerText = pat;
   arrow.style.display = "block";
-  direction = (pat === ">>>>>" || pat === ">><>>") ? "right" : "left";
+  direction = getCenterDirection(pat);
   startTime = performance.now();
   responded = false;
   setTimeout(() => {
@@ -154,8 +165,8 @@ rightBtn.onclick = () => handleResponse("right");
 
 function finish() {
   document.body.innerHTML = "<h2>✅ Test tamamlandı! Sonuçlar gönderiliyor...</h2>";
-  let csv = "Basılan,DoğruYön,RT(ms),Sonuç\\n";
-  results.forEach(r => { csv += r.join(",") + "\\n"; });
+  let csv = "Basılan,DoğruYön,RT(ms),Sonuç\n";
+  results.forEach(r => { csv += r.join(",") + "\n"; });
   const encoded = encodeURIComponent(csv);
   const iframe = document.createElement("iframe");
   iframe.style.display = "none";
@@ -163,15 +174,14 @@ function finish() {
   document.body.appendChild(iframe);
 }
 </script>
-
 </body>
 </html>
 """
 
-# HTML gömme
-html(html_code, height=720, scrolling=False)
+# Embed HTML
+dummy = st_html(html_code, height=700)
 
-# E-posta gönderimi
+# JS→Python veri aktarımı ve mail
 if smtp_ready and "flanker_results_sent" not in st.session_state:
     st.session_state["flanker_results_sent"] = False
 
@@ -184,7 +194,8 @@ if smtp_ready and not st.session_state["flanker_results_sent"]:
             msg["Subject"] = "Yeni Flanker Test Sonuçları"
             msg["From"] = smtp_email
             msg["To"] = receiver_email
-            msg.set_content(csv_data)
+            msg.set_content("Flanker Testi Sonuçları ektedir.")
+            msg.add_attachment(csv_data.encode("utf-8"), filename="flanker_sonuc.csv", maintype="text", subtype="csv")
             with smtplib.SMTP(smtp_server, smtp_port) as server:
                 server.starttls()
                 server.login(smtp_email, smtp_password)
